@@ -1,0 +1,21 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=221
+
+New: 19 May 2008: See also http://theclapp.org/blog/posts/intro_to_lw-vim-mode/ about a partial vi-mode for Lispworks.
+
+New: 1 May 2008: Interested users should check out LIMP at http://mikael.jansson.be/hacking/limp/docs/ and/or vimscript#2219.  Among other improvements, it replaces funnel.pl with screen, which I've thought would be a good idea for a while now but never got around to implementing.
+
+---
+
+VIlisp.vim defines functions and key mappings to send Lisp code to a CMU Common Lisp process running in a separate terminal window.  VIlisp basically automates cut-and-paste from Vim to Lisp.  Vim writes to a FIFO created by a Perl script, funnel.pl.  Funnel takes input from Vim and the keyboard and sends it to Lisp.
+
+I use: Vim v6.3.71, CMU CL 19a-release-20040728 + minimal debian patches, and Perl 5.8.4.  funnel.pl requires the GNU Readline library (4.2 or higher), and Perl modules IO::Pty, Term::ReadLine, and Term::ReadLine::Gnu.  Developed on Debian "sarge" GNU/Linux, kernel 2.6.6.  YMMV.
+
+funnel.pl would probably work with any Lisp that will run in an xterm; just change how it exits Lisp; CMU CL uses "(ext:quit)".  With other minor alterations, it'd probably work with other scrolled-from-the-bottom interpreters (e.g. I've received reports of it working with Octave and R).
+
+Interested users should also see vimscript #165.  I haven't tried it, but from the description, it looks like it might fit the bill.
+
+As of June 2002:
+
+VIlisp.vim also interfaces to your local copy of the Common Lisp HyperSpec (e.g. lookup "defun"), and does Lisp keyword lookups via an included Vim thesaurus file (e.g. expand "with-" into with-accessors, then with-compilation-unit, then with-condition-restarts, etc).
+
+See the README for documentation.
