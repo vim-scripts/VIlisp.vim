@@ -1,32 +1,21 @@
-From: Larry Clapp <larry@theclapp.org>
-Newsgroups: comp.lang.lisp
-Subject: Lisp with Vim
-Date: 15 Feb 2002 05:31:25 GMT
-
-
-Hi, all,
-
 With his voluminous interview on /., Kent Pitman inspired me to check out
 Lisp.  I've seen it before (in Hofstadter's Metamagical Themas and other
 places), and even wrote a small Lisp interpreter in Turbo Pascal (v4) while in
 high school (which helped immensely with my understanding of recursion &
-linked lists, as you might imagine :).
+linked lists, as you might imagine :), or possibly college, I forget.
 
 However, Kent didn't quite inspire me to learn Emacs.  I fiddled with it, and
 purchased _Learning GNU Emacs_, so I can figure it out if I absolutely must,
 but I've been a vi/Vim user since I discovered Unix, and I figured I could
 skip Emacs if I could figure out how to get Vim to talk to Lisp.  I've
 implemented the absolute basics -- sending an expression from the editor to
-the interpreter -- and hope to do more, as time goes by.  (For you Emacs fans:
-I know that Emacs/Ilisp does a lot more than this; I'm sure it's the height of
-hubris for me to consider duplicating it.  :)
+the interpreter -- and hope to do more, as time goes by.
 
-I've enclosed VIlisp.vim, which defines functions and key mappings to send
-Lisp code to a CMU CL process running in a seperate terminal window, via
-funnel.pl.  I've also enclosed funnel.pl (oddly enough :), a Perl script which
-accepts input both from Vim (via a fifo, which it creates) and from its own
-terminal window (via GNU ReadLine), and sends it to CMU CL, and prints the
-output (via "print" :).
+VIlisp.vim defines functions and key mappings to send Lisp code to a CMU CL
+process running in a seperate terminal window, via funnel.pl.  funnel.pl, a
+Perl script, accepts input both from Vim (via a fifo, which it creates) and
+from its own terminal window (via GNU ReadLine), and sends it to CMU CL, and
+prints the output (via "print" :).
 
 Put this at an appropriate place in your ~/.vimrc:
 
@@ -69,14 +58,14 @@ Term::ReadLine::Gnu.  Developed on Debian "woody" GNU/Linux, kernel 2.4.17.
 YMMV.
 
 funnel.pl would probably work with any Lisp that will run in an xterm; just
-change how it exits Lisp; CMU CL uses "(quit)".
+change how it exits Lisp; CMU CL uses "(quit)".  I've received reports of it
+working with Octave and R.
+
+In addition to the two arguments mentioned above, funnel.pl accepts two
+options, -D <debug-level> and -b <blocksize>.  -D specifies the debug level (1
+to 3, currently), -b specifies number of bytes to try to read from the FIFO at
+once (defaults to 1024).
 
 -- Larry Clapp
-
-
-p.s.  Attachments follow.  Sorry they're not "real" attachments; I can't
-figure out how to do MIME in slrn.  I Read (some of) The Fine Manual, but only
-saw how to read MIME messages, not post them.  Bummer.
-
-[ scripts deleted ]
+   larry@theclapp.org
 

@@ -1,5 +1,8 @@
 
-" Last updated: Thu Feb 14 23:45:13 EST 2002 
+" Last updated: Thu Apr 11 00:35:16 EDT 2002 
+" By Larry Clapp <vim@theclapp.org>
+" Copyright 2002
+" $Header: /home/lmc/lisp/briefcase/VIlisp/RCS/VIlisp.vim,v 1.2 2002/04/11 04:43:49 lmc Exp $
 
 " only load the first time
 if exists( "g:VIlisp_loaded" )
@@ -33,15 +36,15 @@ function! VIlisp_get_pos()
   let bufname = bufname( "%" )
 
   " get current position
-  let c_cur = wincol()
+  let c_cur = virtcol( "." )
   let l_cur = line( "." )
-  normal H
+  normal! H
   let l_top = line( "." )
 
   let pos = bufname . "|" . l_top . "," . l_cur . "," . c_cur
 
   " go back
-  exe "normal " l_cur . "G" . c_cur . "|"
+  exe "normal! " l_cur . "G" . c_cur . "|"
 
   return( pos )
 endfunction
@@ -55,17 +58,30 @@ function! VIlisp_goto_pos( pos )
   let c_cur = substitute( a:pos, mx, '\4', '' )
 
   exe "bu" bufname
-  exe "normal " . l_top . "Gzt" . l_cur . "G" . c_cur . "|"
+  exe "normal! " . l_top . "Gzt" . l_cur . "G" . c_cur . "|"
 endfunction
 
 
 function! VIlisp_yank( motion )
+  let value = ''
+
   let p = VIlisp_get_pos()
-  let old_l = @l
-  exec 'normal "ly' . a:motion
-  let value = @l
-  let @l = old_l
+  silent! exec 'normal!' a:motion
+  let new_p = VIlisp_get_pos()
+
+  " did we move?
+  if p != new_p
+      " go back
+      silent! exec 'normal!' a:motion
+
+      let old_l = @l
+      exec 'normal! "ly' . a:motion
+      let value = @l
+      let @l = old_l
+  endif
+
   call VIlisp_goto_pos( p )
+
   return( value )
 endfunction
 
@@ -76,13 +92,13 @@ function! VIlisp_send_sexp_to_buffer( sexp, buffer )
 
   " go to the given buffer, go to the bottom
   exe "bu" a:buffer
-  silent normal G
+  silent normal! G
 
   " tried append() -- doesn't work the way I need it to
   let old_l = @l
   let @l = a:sexp
   silent exe "put l"
-  " normal "lp
+  " normal! "lp
   let @l = old_l
 
   call VIlisp_goto_pos( p )
@@ -91,17 +107,21 @@ endfunction
 
 " destroys contents of VIlisp_scratch buffer
 function! VIlisp_send_to_lisp( sexp )
+  if a:sexp == ''
+    return
+  endif
+
   let p = VIlisp_get_pos()
 
   " goto VIlisp_scratch, delete it, put sexp, write it to lisp
   exe "bu" g:VIlisp_scratch
   exe "%d"
-  normal 1G
+  normal! 1G
 
   " tried append() -- doesn't work the way I need it to
   let old_l = @l
   let @l = a:sexp
-  normal "lP
+  normal! "lP
   let @l = old_l
 
   exe 'w >>' s:pipe_name
@@ -115,11 +135,7 @@ function! VIlisp_eval_defun_lisp()
   " save position
   let p = VIlisp_get_pos()
 
-  " find defun
-"   if search( "^(defun", "bW" ) > 0
-"     call VIlisp_send_to_lisp( VIlisp_yank( "%" ) )
-"   endif
-  normal 99[(
+  silent! exec "normal! 99[("
   call VIlisp_send_to_lisp( VIlisp_yank( "%" ) )
 
   " fix cursor position, in case of error below
@@ -132,7 +148,7 @@ function! VIlisp_eval_next_sexp_lisp()
   let pos = VIlisp_get_pos()
 
   " find & yank current sexp
-  normal [(
+  normal! [(
   let sexp = VIlisp_yank( "%" )
   call VIlisp_send_to_lisp( sexp )
   call VIlisp_goto_pos( pos )
@@ -159,7 +175,7 @@ function! VIlisp_copy_sexp_to_test()
   let pos = VIlisp_get_pos()
 
   " find & yank current sexp
-  normal [(
+  normal! [(
   call VIlisp_send_sexp_to_buffer( VIlisp_yank( "%" ), g:VIlisp_test )
 
   call VIlisp_goto_pos( pos )
@@ -202,7 +218,7 @@ augroup END
 
 " hide from the user that we created and deleted (hid, really) a couple of
 " buffers
-exe 'normal '
+normal! 
 
 " ###################################################################
 " ###################################################################
@@ -212,78 +228,84 @@ exe 'normal '
 " Interact with Lisp interpreter
 
 " send top-level sexp to lisp: eval s-exp
-map ,es :call VIlisp_eval_defun_lisp()<cr>
+map <Leader>es :call VIlisp_eval_defun_lisp()<cr>
 
 " send current s-exp to lisp: eval current
-map ,ec :call VIlisp_eval_next_sexp_lisp()<cr>
+map <Leader>ec :call VIlisp_eval_next_sexp_lisp()<cr>
 
 " eval block
-map ,eb :call VIlisp_eval_block()<cr>
+map <Leader>eb :call VIlisp_eval_block()<cr>
 
-" reset interpreter
-map ,ri :call VIlisp_send_to_lisp( "q\n" )<cr>
+" reset/quit interpreter
+map <Leader>ri :call VIlisp_send_to_lisp( "q\n" )<cr>
+map <Leader>qi :call VIlisp_send_to_lisp( "(quit)\n" )<cr>
+
+" send ^C to interpreter
+" (Note if you try to enter this mapping from the ex command line, you have to
+" press ^V FOUR times, not twice as it appears here.)
+map <Leader>ci :call VIlisp_send_to_lisp( "" )<cr>
 
 " ###################################################################
 " Dunno?
 
 " copy current s-exp to test buffer: Copy to Test
-map ,ct :call VIlisp_copy_sexp_to_test()<cr>
+map <Leader>ct :call VIlisp_copy_sexp_to_test()<cr>
 
 
 " ###################################################################
 " load/compile files
 
 " load file: Load File; Load Any File, Load Compiled File
-map ,lf :call VIlisp_send_to_lisp( "(load \"" . expand( "%:p" ) . "\")\n")<cr>
-map ,laf :call VIlisp_send_to_lisp( "(load \"" . expand( "%:p:r" ) . "\")\n")<cr>
-map ,lcf ,laf
+map <Leader>lf :call VIlisp_send_to_lisp( "(load \"" . expand( "%:p" ) . "\")\n")<cr>
+map <Leader>laf :call VIlisp_send_to_lisp( "(load \"" . expand( "%:p:r" ) . "\")\n")<cr>
+map <Leader>lcf <Leader>laf
 
 " compile file: Compile File; Compile & Load File
-map ,cf :call VIlisp_send_to_lisp( "(compile-file \"" . expand( "%:p" ) . "\")\n")<cr>
-map ,clf ,cf,laf
+map <Leader>cf :call VIlisp_send_to_lisp( "(compile-file \"" . expand( "%:p" ) . "\")\n")<cr>
+map <Leader>clf <Leader>cf<Leader>laf
 
 " ###################################################################
 " Move around among buffers
 
 " goto test or scratch buffer
-map ,tb :call VIlisp_goto_buffer_or_window( g:VIlisp_test )<cr>
-map ,wtb :sb <bar> call VIlisp_goto_buffer_or_window( g:VIlisp_test )<cr>
-map ,sb :exe "bu" g:VIlisp_scratch<cr>
+map <Leader>tb :call VIlisp_goto_buffer_or_window( g:VIlisp_test )<cr>
+map <Leader>wtb :sb <bar> call VIlisp_goto_buffer_or_window( g:VIlisp_test )<cr>
+map <Leader>sb :exe "bu" g:VIlisp_scratch<cr>
 
 " return to VIlisp_last_lisp -- "Test Return"
-map ,tr :call VIlisp_goto_buffer_or_window( VIlisp_last_lisp )<cr>
+map <Leader>tr :call VIlisp_goto_buffer_or_window( VIlisp_last_lisp )<cr>
 
 " return to "lisp buffer", or "last buffer", even
-map ,lb ,tr
+map <Leader>lb <Leader>tr
 
 " ###################################################################
 " Mark & format code
 
 " mark the current top-level sexpr: Mark Sexp
-map ,ms 99[(V%
+map <Leader>ms 99[(V%
 
 " format current, format sexp
-map ,fc [(=%`'
-map ,fs 99,fc
+map <Leader>fc [(=%`'
+map <Leader>fs 99<Leader>fc
 
 " ###################################################################
 " Add & delete code
 
 " remove my ,ilu mapping, which makes the ,il mapping slow
 if maparg( ",ilu" ) != ""
-    unmap ,ilu
+    unmap <Leader>ilu
 endif
 
 " Put a list around the current form: Insert List
-map ,il [(%a)<esc>h%i(
+map <Leader>il [(%a)<esc>h%i(
 
 " comment current -- doesn't work correctly on some forms
-map ,cc m`[(i<cr><esc>v%<esc>a<cr><esc>:'<,'>s/^/; /<cr>``%/(<cr>
+map <Leader>cc m`[(i<cr><esc>v%<esc>a<cr><esc>:'<,'>s/^/; /<cr>``%/(<cr>
 
 
 " ###################################################################
 " Do stuff with VIlisp
 
 " reload this file -- can't do this in a function
-map ,rvil :exe "unlet! g:VIlisp_loaded <bar> so ~/lisp/VIlisp.vim"<cr>
+map <Leader>rvil :exe "unlet! g:VIlisp_loaded <bar> so ~/lisp/VIlisp.vim"<cr>
 

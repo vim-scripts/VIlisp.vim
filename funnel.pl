@@ -1,67 +1,83 @@
 #!/usr/bin/perl
 
-# By Larry Clapp, larry@theclapp.org
+# By Larry Clapp, vim@theclapp.org
+# Copyright 2002
 #
-# Last updated: Thu Feb 14 22:42:54 EST 2002 
+# Last updated: Tue Apr 30 20:24:57 EDT 2002 
 #
 # spawn() adapted from the function of the same name in Expect.pm.  Docs for
 # IO::Pty leave a lot to be desired, esp. if you haven't fiddled with ttys
 # before.
+#
+# $Header: /home/lmc/lisp/briefcase/VIlisp/RCS/funnel.pl,v 1.3 2002/05/01 00:35:28 lmc Exp $
 
 use IO::Pty;                    # This appears to require 5.004
 use Term::ReadLine;
+use Getopt::Std;
 
 use POSIX;                      # For setsid. 
 use Fcntl;                      # For checking file handle settings.
 
+$lisp_pid = 0;
+
+sub catch_sig
+{
+    my $signame = shift;
+
+    print "signal $signame caught; lisp_pid == $lisp_pid\n"
+	if $debug > 1;
+    kill( $signame, $lisp_pid );
+}
+
+
 sub spawn
 {
-  my( $tty, $name_of_tty );
+    # spawn is passed command line args.
+    my(@cmd) = @_;
 
-  # Create the pty which we will use to pass process info.
-  my($self) = new IO::Pty;
+    my( $tty, $name_of_tty );
 
-  # spawn is passed command line args.
-  my(@cmd) = @_;
+    # Create the pty which we will use to pass process info.
+    my($self) = new IO::Pty;
 
-  $name_of_tty = $self->IO::Pty::ttyname();
-  die "Could not assign a pty" 
-      unless $name_of_tty;
-  $self->autoflush();
+    $name_of_tty = $self->IO::Pty::ttyname();
+    die "ERROR: Could not assign a pty" 
+	unless $name_of_tty;
+    $self->autoflush();
 
-  $pid = fork();
-  unless (defined( $pid )) {
-    warn "Cannot fork: $!";
-    return undef;
-  }
-  unless ($pid) {
-    # Child
-    # Create a new 'session', lose controlling terminal.
-    POSIX::setsid() 
-	or warn "Couldn't perform setsid. Strange behavior may result.\r\n  Problem: $!\r\n";
-    $tty = $self->IO::Pty::slave(); # Create slave handle.
+    $lisp_pid = fork();
+    unless (defined( $lisp_pid )) {
+	warn "Cannot fork: $!";
+	return undef;
+    }
+    unless ($lisp_pid) {
+	# Child
+	# Create a new 'session', lose controlling terminal.
+	POSIX::setsid() 
+	    or warn "Couldn't perform setsid. Strange behavior may result.\r\n  Problem: $!\r\n";
+	$tty = $self->IO::Pty::slave(); # Create slave handle.
 
-    # We have to close everything and then reopen ttyname after to get a
-    # controlling terminal.
-    close($self);
-    close STDIN; close STDOUT;
-    open(STDIN,"<&". $tty->fileno()) || die "Couldn't reopen ". $name_of_tty ." for reading, $!\r\n";
-    open(STDOUT,">&". $tty->fileno()) || die "Couldn't reopen ". $name_of_tty ." for writing, $!\r\n";
+	# We have to close everything and then reopen ttyname after to get a
+	# controlling terminal.
+	close($self);
+	close STDIN; close STDOUT;
+	open(STDIN,"<&". $tty->fileno()) || die "ERROR: Couldn't reopen ". $name_of_tty ." for reading, $!\r\n";
+	open(STDOUT,">&". $tty->fileno()) || die "ERROR: Couldn't reopen ". $name_of_tty ." for writing, $!\r\n";
 
-    # put this here or we would never see those die's above...
-    close STDERR;
-    open(STDERR,">&". $tty->fileno()) || die "Couldn't redirect STDERR, $!\r\n";
+	# put this here or we would never see those die's above...
+	close STDERR;
+	open(STDERR,">&". $tty->fileno()) || die "ERROR: Couldn't redirect STDERR, $!\r\n";
 
-    exec (@cmd);
-#    open(STDERR,">&2");
-    die "Cannot exec `@cmd': $!\n";
-    # End Child.
-  }
+	exec (@cmd);
+#	open(STDERR,">&2");
+	die "ERROR: Cannot exec `@cmd': $!\n";
+	# End Child.
+    }
 
-  # sleep 1/4 second; allow child to start
-  # select( undef, undef, undef, 0.25 );
+    # sleep 1/4 second; allow child to start
+    # select( undef, undef, undef, 0.25 );
 
-  return $self;
+    return $self;
 }
 
 
@@ -69,7 +85,7 @@ sub spawn
 sub process_readline_data2
 {
     print "got a line\n"
-	if $debug;
+	if $debug > 1;
     $lineread2 = $_[ 0 ];
     $got_a_line2 = 1; 				# global
 
@@ -79,7 +95,9 @@ sub process_readline_data2
 
 sub check_tty_data
 {
-    my( $tty_read, $rout, @bits, $n, $l );
+    my( $tty_read, $rout, $n, $l );
+
+    $tty_read = 0;
 
     # poll tty
     $n = select( $rout = $tty_rin, undef, undef, 0 );
@@ -87,24 +105,29 @@ sub check_tty_data
     if ($n)
     {
 	# print ( "\nreading from spawned tty ...\n" );
-	$tty_read = sysread( $master, $l, 10240 );
+	$tty_read = sysread( $master, $l, $block_size );
 	if ($tty_read)
 	{
 	    print "$tty_read bytes read from tty\n"
-		if $debug;
+		if $debug >= 1;
 
-	    if ($stdin_data)
+	    if ($stdin_data eq '')
+	    {
+		print "no stdin data\n"
+		    if $debug >= 1;
+	    }
+	    else
 	    {
 		print "stdin_data is >$stdin_data<\n",
 		    "tty_data is >$l<\n"
-			if $debug;
+			if $debug >= 1;
 
 		$stdin_data =~ s/[\r\n]+$//;
 		if ($l =~ /(\Q$stdin_data\E[\r\n]*)/)
 		{
 		    $match = $1;
 		    print "Deleting >$match< from tty_data\n"
-			if $debug;
+			if $debug >= 1;
 		    $l =~ s/\Q$match\E//;
 
 		    $stdin_data = undef;
@@ -112,13 +135,8 @@ sub check_tty_data
 		else
 		{
 		    print "tty data doesn't match stdin_data\n"
-			if $debug;
+			if $debug >= 1;
 		}
-	    }
-	    else
-	    {
-		print "no stdin data\n"
-		    if $debug;
 	    }
 
 	    print $l;
@@ -131,13 +149,13 @@ sub check_tty_data
 		if ($last_partial_line eq '')
 		{
 		    print "resetting last_partial_line\n"
-			if $debug3;
+			if $debug >= 3;
 		    $last_partial_line = undef;
 		}
 		else
 		{
 		    print "last partial line is >$last_partial_line<\n"
-			if $debug3;
+			if $debug >= 3;
 		}
 	    }
 	}
@@ -150,55 +168,87 @@ sub check_tty_data
 	    }
 	    else
 	    {
-		print "sysread of tty returned undef\n";
-		print "error code is $!\n";
+		if ($debug >= 1)
+		{
+		    print "sysread of tty returned undef\n";
+		    print "error code is $!\n";
+		}
 	    }
 	}
     }
     else
     {
 	print "nothing read from tty\n"
-	    if $debug;
+	    if $debug >= 1;
     }
 
     return( $tty_read );
 }
 
+
+sub show_vec
+{
+    my( $name, $vec ) = @_;
+    print "vec $name is ", scalar( reverse( split( //, unpack( "b*", $vec ) ) ) ), "\n";
+}
+
+	    
 sub check_pipe_data
 {
-    my( $pipe_read, $rout, @bits, $n, $l );
+    my( $pipe_read, $rout, $eout, $n, $l );
+
+    $pipe_read = 0;
+    $l = '';
 
     # poll fifo
-    $n = select( $rout = $pipe_rin, undef, undef, 0 );
+    $n = select( $rout = $pipe_rin, undef, $eout = $pipe_rin, 0 );
 
-    if ($n)
+    if ($n > 0)
     {
-	print ( "\nreading from pipe ...\n" )
-	    if $debug;
-	$pipe_read = sysread( PIPE, $l, 10240 );
-	if ($pipe_read)
+	if ($debug >= 3)
 	{
-	    print "$pipe_read bytes read from pipe\n"
-		if $debug;
+	    &show_vec( "rout", $rout );
+	    &show_vec( "eout", $eout );
+	}
 
-	    print $master $l;
-	    $pipe_data = $l;
+	print ( "select returned $n; reading from pipe ...\n" )
+	    if $debug >= 1;
+	$pipe_read = sysread( PIPE, $l, $block_size );
+	if (defined( $pipe_read ))
+	{
+	    if ($pipe_read)
+	    {
+		print "$pipe_read bytes read from pipe\n"
+		    if $debug >= 1;
+
+		print $master $l;
+		$pipe_data = $l;
+	    }
+	    else
+	    {
+		print "sysread on pipe returned 0 -- EOF\n";
+		print "\$! is $!\n";
+		print $master "(quit)\n";
+		$pipe_open = 0;
+	    }
 	}
 	else
 	{
-	    print "sysread on pipe returned 0\n";
+	    print "sysread on pipe returned undef -- EOF??\n";
+	    print "\$! is $!\n";
 	    print $master "(quit)\n";
 	    $pipe_open = 0;
 	}
     }
     else
     {
-	print "nothing read from pipe\n"
-	    if $debug;
+	print "select returned $n; nothing read from pipe\n"
+	    if $debug >= 1;
     }
 
     return( $pipe_read );
 }
+
 
 sub install_handler
 {
@@ -206,7 +256,7 @@ sub install_handler
     {
 	print "Installing handler with prompt >$last_partial_line<\n",
 	    "resetting last_partial_line\n"
-	    if $debug3;
+	    if $debug >= 3;
 	$rl->{already_prompted} = 1;
 	$rl->callback_handler_install( $last_partial_line, \&process_readline_data2 );
 	$handler_installed = 1;
@@ -216,7 +266,7 @@ sub install_handler
     else
     {
 	print "Installing handler with no prompt\n"
-	    if $debug3;
+	    if $debug >= 3;
 	$rl->{already_prompted} = 0;
 	$rl->callback_handler_install( '', \&process_readline_data2 );
 	$handler_installed = 1;
@@ -227,7 +277,7 @@ sub install_handler
 sub uninstall_handler
 {
     print "Uninstalling handler\n"
-	if $debug3;
+	if $debug >= 3;
     $rl->callback_handler_install( '', undef );
     $handler_installed = 0;
 }
@@ -235,7 +285,9 @@ sub uninstall_handler
 
 sub check_stdin_data
 {
-    my( $stdin_read, $rout, @bits, $n );
+    my( $stdin_read, $rout, $n );
+
+    $stdin_read = 0;
 
     if ($handler_installed)
     {
@@ -243,7 +295,7 @@ sub check_stdin_data
 	    && !$told_readline)
 	{
 	    print "Telling readline on new line; resetting last_partial_line\n"
-		if $debug3;
+		if $debug >= 3;
 	    $told_readline = 1;
 	    $rl->set_prompt( $last_partial_line );
 	    $rl->on_new_line_with_prompt;
@@ -279,9 +331,9 @@ sub check_stdin_data
 	    if ($lineread2 ne '')
 	    {
 		print "Adding history >$lineread2<\n"
-		    if $debug2;
+		    if $debug >= 2;
 		$rl->AddHistory( $lineread2 );
-		if ($debug2)
+		if ($debug >= 2)
 		{
 		    printf "where_history is %d\n", $rl->where_history;
 		    foreach $f ($rl->GetHistory)
@@ -302,46 +354,73 @@ sub check_stdin_data
 }
 
 
+select( STDERR ); $| = 1;
+select( STDOUT ); $| = 1;
+
 # timeout in seconds
 $timeout = 0.05;
+$got_a_line2 = 0;
+$lineread2 = '';
 
 $debug = 0;
-$debug2 = 0;
-$debug3 = 0;
+$block_size = 1024;
+
+&getopt( 'Db' );
+$debug = $opt_D 	if $opt_D;
+$block_size = $opt_b	if $opt_b;
 
 $pipe_name = shift @ARGV;
 
 if (! -e $pipe_name)
 {
-    system( "mkfifo -m go-rwx $pipe_name" );
+    print "Making fifo $pipe_name\n"
+	if $debug >= 3;
+    ($rc = system( "mkfifo -m go-rwx $pipe_name" ))
+	&& die "ERROR: Couldn't make fifo $pipe_name: $!";
+
+    print "mkfifo returned $rc\n"
+	if $debug >= 3;
+
+    system( "ls -l $pipe_name" )
+	if ($debug >= 2);
 }
-elsif (! -p $pipe_name)
+
+if (! -p $pipe_name)
 {
     print STDERR "$pipe_name exists, and is not a fifo\n";
     exit( 1 );
 }
 
 $writer_pid = fork();
+die "ERROR: fork failed for 'writer': $!\n"
+    if !defined( $writer_pid );
 if (0 == $writer_pid)
 {
     # child
 
+    $SIG{ INT } = 'IGNORE';
+
     # Open it for output, so the open-for-input call doesn't block.  This allows
     # any other process to just open it, write to it, and close it, and we don't
     # have to worry about it closing due to lack of writers.
-    open( PIPE_OUT, ">$pipe_name" ) or die "couldn't open pipe for output: $!";
+    open( PIPE_OUT, ">$pipe_name" ) 
+	or die "ERROR: couldn't open pipe for output: $!";
+
+    print "'writer' process opened $pipe_name for output\n"
+	if $debug >= 3;
 
     # sleep for a year
     sleep( 3600 * 24 * 365 );
     exit;
 }
 
+print "spawned 'writer' process; pid is $writer_pid\n"
+    if $debug >= 1;
+
 # don't need to sleep to wait for above child -- the OS will block us until
 # the child opens the pipe
-open( PIPE, "<$pipe_name" ) or die "couldn't open fifo '$pipe_name': $!";
-
-select( PIPE ); $| = 1;
-select( STDOUT ); $| = 1;
+open( PIPE, "<$pipe_name" ) 
+    or die "ERROR: Couldn't open fifo $pipe_name: $!";
 
 $last_partial_line = undef;
 $tty_open = 1;
@@ -350,7 +429,9 @@ $stdin_open = 1;
 
 $master = &spawn( @ARGV );
 print "spawned @ARGV\n"
-    if $debug;
+    if $debug >= 1;
+
+$SIG{ INT } = \&catch_sig;
 
 $tty_rin = '';   vec( $tty_rin, $master->fileno(), 1 ) = 1;
 $pipe_rin = '';  vec( $pipe_rin, fileno( PIPE ), 1 ) = 1;
@@ -361,7 +442,7 @@ $rl->prep_terminal( 0 );
 $attribs = $rl->Attribs;
 $rl->using_history();
 
-if ($debug)
+if ($debug >= 2)
 {
     @features = keys %{ $rl->Features };
     print "ReadLine features: @features\n";
@@ -396,9 +477,17 @@ while ($tty_open
     }
 }
 
-print "Signaling writer\n"
-    if $debug;
-kill 2, $writer_pid;
+if (kill( 0, $writer_pid ))
+{
+    print "Signaling writer\n"
+	if $debug >= 1;
+    kill 1, $writer_pid;
+}
+else
+{
+    print STDERR "ERROR: 'writer' pid $pid no longer exists!\n";
+}
+
 $rc = wait();
 print "wait returned $rc\n"
     if $debug;
@@ -407,5 +496,8 @@ print "wait returned $rc\n"
 # exactly what
 
 # delete the fifo
-unlink( $pipe_name );
+unlink( $pipe_name )
+    if $debug == 0;
+
+system( "stty sane" );
 
