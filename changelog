@@ -1,3 +1,10 @@
+Thu Jun  6 00:36:46 EDT 2002
+
+- Updated the README.  Added lots of documentation.
+- Added looking up keywords in the HyperSpec
+- Added a Lisp keyword thesaurus
+- changed VIlisp.vim to check for the existence of a BufRead/*.lsp event
+
 Tue Apr 30 20:19:46 EDT 2002
 
 - made the "sysread of tty returned undef" when you exit the interpreter
@@ -26,7 +33,7 @@ Thu Feb 21 00:15:31 EST 2002
 - added a few mappings:
     - ,qi -- quit interpreter
     - ,ci -- send ^C to interpreter
-- added $Header$ lines to VIlisp.vim & funnel.pl
+- added $Header: /home/lmc/lisp/briefcase/VIlisp/devel/RCS/changelog,v 1.1 2002/06/11 01:58:19 lmc Exp $ lines to VIlisp.vim & funnel.pl
 - reindented some code in funnel.pl
 - changed signal sent to background "writer" process on exit from 2 to 1
 - added -D <debug-level> and -b <blocksize> to funnel.pl

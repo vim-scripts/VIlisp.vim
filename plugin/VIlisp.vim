@@ -1,8 +1,9 @@
 
-" Last updated: Thu Apr 11 00:35:16 EDT 2002 
+" Last updated: Mon Jun 10 22:11:59 EDT 2002 
+
 " By Larry Clapp <vim@theclapp.org>
 " Copyright 2002
-" $Header: /home/lmc/lisp/briefcase/VIlisp/RCS/VIlisp.vim,v 1.2 2002/04/11 04:43:49 lmc Exp $
+" $Header: /home/lmc/lisp/briefcase/VIlisp/devel/RCS/VIlisp.vim,v 1.5 2002/06/11 02:38:39 lmc Exp $
 
 " only load the first time
 if exists( "g:VIlisp_loaded" )
@@ -113,7 +114,7 @@ function! VIlisp_send_to_lisp( sexp )
 
   let p = VIlisp_get_pos()
 
-  " goto VIlisp_scratch, delete it, put sexp, write it to lisp
+  " goto VIlisp_scratch, delete it, put s-exp, write it to lisp
   exe "bu" g:VIlisp_scratch
   exe "%d"
   normal! 1G
@@ -147,7 +148,7 @@ function! VIlisp_eval_next_sexp_lisp()
   " save position
   let pos = VIlisp_get_pos()
 
-  " find & yank current sexp
+  " find & yank current s-exp
   normal! [(
   let sexp = VIlisp_yank( "%" )
   call VIlisp_send_to_lisp( sexp )
@@ -174,7 +175,7 @@ function! VIlisp_copy_sexp_to_test()
   " save position
   let pos = VIlisp_get_pos()
 
-  " find & yank current sexp
+  " find & yank current s-exp
   normal! [(
   call VIlisp_send_sexp_to_buffer( VIlisp_yank( "%" ), g:VIlisp_test )
 
@@ -182,16 +183,30 @@ function! VIlisp_copy_sexp_to_test()
 endfunction
 
 
+function! VIlisp_hyperspec( type, make_page )
+  " get current word under cursor
+  let word = expand( "<cword>" )
+  let cmd = "! perl " . s:VIlisp_location . "/VIlisp-hyperspec.pl "
+  let cmd = cmd . a:type . " " . a:make_page . " '" .  word . "'"
+  silent! exe cmd
+  redraw!
+endfunction
+
 
 " ###################################################################
 " ###################################################################
 " startup stuff
-let g:VIlisp_scratch = $HOME. "/.VIlisp_scratch"
+let s:VIlisp_location = expand( "<sfile>:h" )
+
+let g:VIlisp_scratch = $HOME . "/.VIlisp_scratch"
 let g:VIlisp_test = $HOME . '/.VIlisp_test'
 let s:pipe_name = $HOME . '/.lisp-pipe'
+exe "set complete+=s" . s:VIlisp_location . "/lisp-thesaurus"
 
 exe "new" g:VIlisp_scratch
-doauto lisp BufRead x.lsp
+if exists( "#BufRead#*.lsp#" )
+    doauto BufRead x.lsp
+endif
 set syntax=lisp
 set buftype=nowrite
 set bufhidden=hide
@@ -200,7 +215,9 @@ set noswapfile
 hide
 
 exe "new" g:VIlisp_test
-doauto lisp BufRead x.lsp
+if exists( "#BufRead#*.lsp#" )
+    doauto BufRead x.lsp
+endif
 set syntax=lisp
 " set buftype=nofile
 set bufhidden=hide
@@ -227,7 +244,7 @@ normal!
 " ###################################################################
 " Interact with Lisp interpreter
 
-" send top-level sexp to lisp: eval s-exp
+" send top-level s-exp to lisp: eval s-exp
 map <Leader>es :call VIlisp_eval_defun_lisp()<cr>
 
 " send current s-exp to lisp: eval current
@@ -246,7 +263,7 @@ map <Leader>qi :call VIlisp_send_to_lisp( "(quit)\n" )<cr>
 map <Leader>ci :call VIlisp_send_to_lisp( "" )<cr>
 
 " ###################################################################
-" Dunno?
+" Manipulate expression within Vim buffers
 
 " copy current s-exp to test buffer: Copy to Test
 map <Leader>ct :call VIlisp_copy_sexp_to_test()<cr>
@@ -281,19 +298,20 @@ map <Leader>lb <Leader>tr
 " ###################################################################
 " Mark & format code
 
-" mark the current top-level sexpr: Mark Sexp
+" mark the current top-level s-expr: Mark S-exp
 map <Leader>ms 99[(V%
 
-" format current, format sexp
+" format current, format s-exp
 map <Leader>fc [(=%`'
 map <Leader>fs 99<Leader>fc
 
 " ###################################################################
 " Add & delete code
 
-" remove my ,ilu mapping, which makes the ,il mapping slow
+" Remove my ,ilu mapping, which makes the ,il mapping slow.  Assumes 
+" <Leader> == ",".  Probably not a problem for anybody but the author.
 if maparg( ",ilu" ) != ""
-    unmap <Leader>ilu
+    unmap ,ilu
 endif
 
 " Put a list around the current form: Insert List
@@ -304,8 +322,21 @@ map <Leader>cc m`[(i<cr><esc>v%<esc>a<cr><esc>:'<,'>s/^/; /<cr>``%/(<cr>
 
 
 " ###################################################################
+" Search the hyperspec
+map <Leader>he :call VIlisp_hyperspec( "exact", 0 )<cr>
+map <Leader>hp :call VIlisp_hyperspec( "prefix", 1 )<cr>
+map <Leader>hs :call VIlisp_hyperspec( "suffix", 1 )<cr>
+map <Leader>hg :call VIlisp_hyperspec( "grep", 1 )<cr>
+map <Leader>hi :call VIlisp_hyperspec( "index", 0 )<cr>
+map <Leader>hI :call VIlisp_hyperspec( "index-page", 0 )<cr>
+
+" map the "man" command to do an exact lookup in the Hyperspec
+map K <Leader>he
+
+" ###################################################################
 " Do stuff with VIlisp
 
 " reload this file -- can't do this in a function
-map <Leader>rvil :exe "unlet! g:VIlisp_loaded <bar> so ~/lisp/VIlisp.vim"<cr>
+exec "map <Leader>rvil :exe \"unlet! g:VIlisp_loaded <bar>"
+    \ "so " . s:VIlisp_location . "/VIlisp.vim\"<cr>"
 
