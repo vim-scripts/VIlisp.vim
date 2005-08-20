@@ -3,13 +3,13 @@
 # By Larry Clapp, vim@theclapp.org
 # Copyright 2002
 #
-# Last updated: Tue Apr 30 20:24:57 EDT 2002 
+# Last updated: Sun Jun 27 19:00:55 EDT 2004 
 #
 # spawn() adapted from the function of the same name in Expect.pm.  Docs for
 # IO::Pty leave a lot to be desired, esp. if you haven't fiddled with ttys
 # before.
 #
-# $Header: /home/lmc/lisp/briefcase/VIlisp/RCS/funnel.pl,v 1.3 2002/05/01 00:35:28 lmc Exp $
+# $Header: /home/lmc/lisp/briefcase/VIlisp/devel/RCS/funnel.pl,v 1.4 2003/02/20 20:02:47 lmc Exp lmc $
 
 use IO::Pty;                    # This appears to require 5.004
 use Term::ReadLine;
@@ -18,6 +18,7 @@ use Getopt::Std;
 use POSIX;                      # For setsid. 
 use Fcntl;                      # For checking file handle settings.
 
+$QUIT = "(ext:quit)\n";
 $lisp_pid = 0;
 
 sub catch_sig
@@ -77,6 +78,7 @@ sub spawn
     # sleep 1/4 second; allow child to start
     # select( undef, undef, undef, 0.25 );
 
+    $self->close_slave();
     return $self;
 }
 
@@ -104,82 +106,86 @@ sub check_tty_data
 
     if ($n)
     {
-	# print ( "\nreading from spawned tty ...\n" );
-	$tty_read = sysread( $master, $l, $block_size );
-	if ($tty_read)
-	{
-	    print "$tty_read bytes read from tty\n"
-		if $debug >= 1;
-
-	    if ($stdin_data eq '')
+	while ($n) {
+	    # print ( "\nreading from spawned tty ...\n" );
+	    $tty_read = sysread( $master, $l, $tty_block_size );
+	    if ($tty_read)
 	    {
-		print "no stdin data\n"
+		print "$tty_read bytes read from tty\n"
 		    if $debug >= 1;
-	    }
-	    else
-	    {
-		print "stdin_data is >$stdin_data<\n",
+
+		if ($stdin_data eq '')
+		{
+		    print "no stdin data\n"
+			if $debug >= 1;
+		}
+		else
+		{
+		    print "stdin_data is >$stdin_data<\n",
 		    "tty_data is >$l<\n"
 			if $debug >= 1;
 
-		$stdin_data =~ s/[\r\n]+$//;
-		if ($l =~ /(\Q$stdin_data\E[\r\n]*)/)
-		{
-		    $match = $1;
-		    print "Deleting >$match< from tty_data\n"
-			if $debug >= 1;
-		    $l =~ s/\Q$match\E//;
+		    $stdin_data =~ s/[\r\n]+$//;
+		    if ($l =~ /(\Q$stdin_data\E[\r\n]*)/)
+		    {
+			$match = $1;
+			print "Deleting >$match< from tty_data\n"
+			    if $debug >= 1;
+			$l =~ s/\Q$match\E//;
 
-		    $stdin_data = undef;
+			$stdin_data = undef;
+		    }
+		    else
+		    {
+			print "tty data doesn't match stdin_data\n"
+			    if $debug >= 1;
+		    }
 		}
-		else
-		{
-		    print "tty data doesn't match stdin_data\n"
-			if $debug >= 1;
-		}
-	    }
 
-	    print $l;
-	    $tty_data = $l;
+		print $l;
+		$tty_data = $l;
 
-	    if ($tty_data !~ /[\r\n]$/)
-	    {
-		$tty_data =~ /\n?([^\r\n]*)$/;
-		$last_partial_line = $1;
-		if ($last_partial_line eq '')
+		if ($tty_data !~ /[\r\n]$/)
 		{
-		    print "resetting last_partial_line\n"
-			if $debug >= 3;
-		    $last_partial_line = undef;
+		    $tty_data =~ /\n?([^\r\n]*)$/;
+		    $last_partial_line = $1;
+		    if ($last_partial_line eq '')
+		    {
+			print "resetting last_partial_line\n"
+			    if $debug >= 3;
+			$last_partial_line = undef;
+		    }
+		    else
+		    {
+			print "last partial line is >$last_partial_line<\n"
+			    if $debug >= 3;
+		    }
 		}
-		else
-		{
-		    print "last partial line is >$last_partial_line<\n"
-			if $debug >= 3;
-		}
-	    }
-	}
-	else
-	{
-	    $tty_open = 0;
-	    if (defined( $tty_read ))
-	    {
-		print "sysread of tty returned 0\n";
 	    }
 	    else
 	    {
-		if ($debug >= 1)
+		$tty_open = 0;
+		if (defined( $tty_read ))
 		{
-		    print "sysread of tty returned undef\n";
-		    print "error code is $!\n";
+		    print "sysread of tty returned 0\n";
+		}
+		else
+		{
+		    if ($debug >= 1)
+		    {
+			print "sysread of tty returned undef\n";
+			print "error code is $!\n";
+		    }
+		    last;
 		}
 	    }
+	    $n = select( $rout = $tty_rin, undef, undef, 0.1 );
 	}
     }
     else
     {
 	print "nothing read from tty\n"
-	    if $debug >= 1;
+	    if $debug >= 2;
     }
 
     return( $tty_read );
@@ -200,6 +206,14 @@ sub check_pipe_data
     $pipe_read = 0;
     $l = '';
 
+    # poll the outgoing tty; return if not empty
+    $n = select( undef, $wout = $tty_rin, $eout = $pipe_rin, 0 );
+    if ($n == 0) {
+	# sleep for a tenth of a second to try to let the other end catch up
+	select( undef, undef, undef, 0.1 );
+	return;
+    }
+
     # poll fifo
     $n = select( $rout = $pipe_rin, undef, $eout = $pipe_rin, 0 );
 
@@ -211,9 +225,9 @@ sub check_pipe_data
 	    &show_vec( "eout", $eout );
 	}
 
-	print ( "select returned $n; reading from pipe ...\n" )
+	print( "select returned $n; reading from pipe ...\n" )
 	    if $debug >= 1;
-	$pipe_read = sysread( PIPE, $l, $block_size );
+	$pipe_read = sysread( PIPE, $l, $pipe_block_size );
 	if (defined( $pipe_read ))
 	{
 	    if ($pipe_read)
@@ -221,6 +235,11 @@ sub check_pipe_data
 		print "$pipe_read bytes read from pipe\n"
 		    if $debug >= 1;
 
+		if ($l =~ /^VIlisp_reload_interpreter$/)
+		{
+		    $l = $QUIT;
+		    $reload_interpreter = 1;
+		}
 		print $master $l;
 		$pipe_data = $l;
 	    }
@@ -228,7 +247,7 @@ sub check_pipe_data
 	    {
 		print "sysread on pipe returned 0 -- EOF\n";
 		print "\$! is $!\n";
-		print $master "(quit)\n";
+		print $master $QUIT;
 		$pipe_open = 0;
 	    }
 	}
@@ -236,14 +255,14 @@ sub check_pipe_data
 	{
 	    print "sysread on pipe returned undef -- EOF??\n";
 	    print "\$! is $!\n";
-	    print $master "(quit)\n";
+	    print $master $QUIT;
 	    $pipe_open = 0;
 	}
     }
     else
     {
 	print "select returned $n; nothing read from pipe\n"
-	    if $debug >= 1;
+	    if $debug >= 2;
     }
 
     return( $pipe_read );
@@ -345,8 +364,9 @@ sub check_stdin_data
 	}
 	else
 	{
-	    print "readline on stdin returned empty line\n";
+	    print "\nEnd Of File on stdin: exiting\n";
 	    $stdin_open = 0;
+	    print $master $QUIT;
 	}
     }
 
@@ -363,7 +383,10 @@ $got_a_line2 = 0;
 $lineread2 = '';
 
 $debug = 0;
-$block_size = 1024;
+
+# should be < 4096, at least on my system
+$pipe_block_size = 1024;
+$tty_block_size = 1024;
 
 &getopt( 'Db' );
 $debug = $opt_D 	if $opt_D;
@@ -371,73 +394,10 @@ $block_size = $opt_b	if $opt_b;
 
 $pipe_name = shift @ARGV;
 
-if (! -e $pipe_name)
-{
-    print "Making fifo $pipe_name\n"
-	if $debug >= 3;
-    ($rc = system( "mkfifo -m go-rwx $pipe_name" ))
-	&& die "ERROR: Couldn't make fifo $pipe_name: $!";
-
-    print "mkfifo returned $rc\n"
-	if $debug >= 3;
-
-    system( "ls -l $pipe_name" )
-	if ($debug >= 2);
-}
-
-if (! -p $pipe_name)
-{
-    print STDERR "$pipe_name exists, and is not a fifo\n";
-    exit( 1 );
-}
-
-$writer_pid = fork();
-die "ERROR: fork failed for 'writer': $!\n"
-    if !defined( $writer_pid );
-if (0 == $writer_pid)
-{
-    # child
-
-    $SIG{ INT } = 'IGNORE';
-
-    # Open it for output, so the open-for-input call doesn't block.  This allows
-    # any other process to just open it, write to it, and close it, and we don't
-    # have to worry about it closing due to lack of writers.
-    open( PIPE_OUT, ">$pipe_name" ) 
-	or die "ERROR: couldn't open pipe for output: $!";
-
-    print "'writer' process opened $pipe_name for output\n"
-	if $debug >= 3;
-
-    # sleep for a year
-    sleep( 3600 * 24 * 365 );
-    exit;
-}
-
-print "spawned 'writer' process; pid is $writer_pid\n"
-    if $debug >= 1;
-
-# don't need to sleep to wait for above child -- the OS will block us until
-# the child opens the pipe
-open( PIPE, "<$pipe_name" ) 
-    or die "ERROR: Couldn't open fifo $pipe_name: $!";
-
-$last_partial_line = undef;
-$tty_open = 1;
-$pipe_open = 1;
-$stdin_open = 1;
-
-$master = &spawn( @ARGV );
-print "spawned @ARGV\n"
-    if $debug >= 1;
-
-$SIG{ INT } = \&catch_sig;
-
-$tty_rin = '';   vec( $tty_rin, $master->fileno(), 1 ) = 1;
-$pipe_rin = '';  vec( $pipe_rin, fileno( PIPE ), 1 ) = 1;
-$stdin_rin = ''; vec( $stdin_rin, fileno( STDIN ), 1 ) = 1;
+$exec_count = 0;
 
 $rl = new Term::ReadLine 'funnel';
+$rl->initialize();
 $rl->prep_terminal( 0 );
 $attribs = $rl->Attribs;
 $rl->using_history();
@@ -450,54 +410,133 @@ if ($debug >= 2)
 
 &install_handler();
 
-$rin_all = '';
-vec( $rin_all, $master->fileno(), 1 ) = 1;
-vec( $rin_all, fileno( PIPE ), 1 ) = 1;
-vec( $rin_all, fileno( STDIN ), 1 ) = 1;
+do {
+    $reload_interpreter = 0;
 
-while ($tty_open
-       && $pipe_open
-       && $stdin_open)
-{
-    $tty_read = &check_tty_data();
-    $pipe_read = &check_pipe_data();
-    $stdin_read  = &check_stdin_data();
-
-    if (!$tty_read
-	&& !$pipe_read
-	&& !$stdin_read
-	&& $tty_open
-	&& $pipe_open
-	&& $stdin_open)
+    if (! -e $pipe_name)
     {
-	# wait for *any* data
-	print "waiting for any data\n"
-	    if $debug;
-	$n = select( $rout = $rin_all, undef, undef, undef );
+	print "Making fifo $pipe_name\n"
+	    if $debug >= 3;
+	($rc = system( "mkfifo -m go-rwx $pipe_name" ))
+	    && die "ERROR: Couldn't make fifo $pipe_name: $!";
+
+	print "mkfifo returned $rc\n"
+	    if $debug >= 3;
+
+	system( "ls -l $pipe_name" )
+	    if ($debug >= 2);
     }
-}
 
-if (kill( 0, $writer_pid ))
-{
-    print "Signaling writer\n"
+    if (! -p $pipe_name)
+    {
+	print STDERR "$pipe_name exists, and is not a fifo\n";
+	exit( 1 );
+    }
+
+    $writer_pid = fork();
+    die "ERROR: fork failed for 'writer': $!\n"
+	if !defined( $writer_pid );
+    if (0 == $writer_pid)
+    {
+	# child
+
+	$SIG{ INT } = 'IGNORE';
+
+	# Open it for output, so the open-for-input call doesn't block.  This allows
+	# any other process to just open it, write to it, and close it, and we don't
+	# have to worry about it closing due to lack of writers.
+	open( PIPE_OUT, ">$pipe_name" ) 
+	    or die "ERROR: couldn't open pipe for output: $!";
+
+	print "'writer' process opened $pipe_name for output\n"
+	    if $debug >= 3;
+
+	# sleep for a year
+	sleep( 3600 * 24 * 365 );
+	exit;
+    }
+
+    print "spawned 'writer' process; pid is $writer_pid\n"
 	if $debug >= 1;
-    kill 1, $writer_pid;
-}
-else
-{
-    print STDERR "ERROR: 'writer' pid $pid no longer exists!\n";
-}
 
-$rc = wait();
-print "wait returned $rc\n"
-    if $debug;
+    # don't need to sleep to wait for above child -- the OS will block us until
+    # the child opens the pipe
+    open( PIPE, "<$pipe_name" ) 
+	or die "ERROR: Couldn't open fifo $pipe_name: $!";
 
-# FIXME: probably need to do something to close down the tty, but I don't know
-# exactly what
+    $last_partial_line = undef;
+    $tty_open = 1;
+    $pipe_open = 1;
+    $stdin_open = 1;
 
-# delete the fifo
-unlink( $pipe_name )
-    if $debug == 0;
+    $master = &spawn( @ARGV );
+    print "spawned @ARGV\n"
+	if $debug >= 1;
+
+    $SIG{ INT } = \&catch_sig;
+
+    $tty_rin = '';   vec( $tty_rin, $master->fileno(), 1 ) = 1;
+    $pipe_rin = '';  vec( $pipe_rin, fileno( PIPE ), 1 ) = 1;
+    $stdin_rin = ''; vec( $stdin_rin, fileno( STDIN ), 1 ) = 1;
+
+    $rin_all = '';
+    vec( $rin_all, $master->fileno(), 1 ) = 1;
+    vec( $rin_all, fileno( PIPE ), 1 ) = 1;
+    vec( $rin_all, fileno( STDIN ), 1 ) = 1;
+
+    while ($tty_open
+	   && $pipe_open
+	   && $stdin_open)
+    {
+	$tty_read = &check_tty_data();
+	$pipe_read = &check_pipe_data();
+	$stdin_read  = &check_stdin_data();
+
+	if (!$tty_read
+	    && !$pipe_read
+	    && !$stdin_read
+	    && $tty_open
+	    && $pipe_open
+	    && $stdin_open)
+	{
+	    # wait for *any* data
+	    print "waiting for any data\n"
+		if $debug;
+	    $n = select( $rout = $rin_all, undef, undef, undef );
+	}
+    }
+    
+    if (kill( 0, $writer_pid ))
+    {
+	print "Signaling writer\n"
+	    if $debug >= 1;
+	kill 1, $writer_pid;
+    }
+    else
+    {
+	print STDERR "ERROR: 'writer' pid $pid no longer exists!\n";
+    }
+
+    # Wait for both children: the Lisp listener and the "writer" process
+    # print "Waiting for children to end\n";
+    $rc = wait();
+    print "wait returned $rc; \$? = $?\n"
+	if $debug;
+
+    $rc = wait();
+    print "wait returned $rc; \$? = $?\n"
+	if $debug;
+
+    # FIXME: probably need to do something to close down the tty, but I don't know
+    # exactly what
+
+    # delete the fifo
+    unlink( $pipe_name )
+	if $debug == 0;
+} while ($reload_interpreter);
+
+&uninstall_handler();
+$rl->deprep_terminal();
 
 system( "stty sane" );
 

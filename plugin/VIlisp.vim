@@ -1,5 +1,5 @@
 
-" Last updated: Mon Jun 10 22:11:59 EDT 2002 
+" Last updated: Mon Aug 15 00:32:58 EDT 2005 
 
 " By Larry Clapp <vim@theclapp.org>
 " Copyright 2002
@@ -19,7 +19,7 @@ endif
 
 function! VIlisp_goto_buffer_or_window( buff )
   if -1 == bufwinnr( a:buff )
-    exe "bu" a:buff
+    exe "hide bu" a:buff
   else
     exe bufwinnr( a:buff ) . "wincmd w"
   endif
@@ -58,7 +58,7 @@ function! VIlisp_goto_pos( pos )
   let l_cur = substitute( a:pos, mx, '\3', '' )
   let c_cur = substitute( a:pos, mx, '\4', '' )
 
-  exe "bu" bufname
+  exe "hide bu" bufname
   exe "normal! " . l_top . "Gzt" . l_cur . "G" . c_cur . "|"
 endfunction
 
@@ -92,7 +92,7 @@ function! VIlisp_send_sexp_to_buffer( sexp, buffer )
   let p = VIlisp_get_pos()
 
   " go to the given buffer, go to the bottom
-  exe "bu" a:buffer
+  exe "hide bu" a:buffer
   silent normal! G
 
   " tried append() -- doesn't work the way I need it to
@@ -115,7 +115,7 @@ function! VIlisp_send_to_lisp( sexp )
   let p = VIlisp_get_pos()
 
   " goto VIlisp_scratch, delete it, put s-exp, write it to lisp
-  exe "bu" g:VIlisp_scratch
+  exe "hide bu" g:VIlisp_scratch
   exe "%d"
   normal! 1G
 
@@ -287,7 +287,7 @@ map <Leader>clf <Leader>cf<Leader>laf
 " goto test or scratch buffer
 map <Leader>tb :call VIlisp_goto_buffer_or_window( g:VIlisp_test )<cr>
 map <Leader>wtb :sb <bar> call VIlisp_goto_buffer_or_window( g:VIlisp_test )<cr>
-map <Leader>sb :exe "bu" g:VIlisp_scratch<cr>
+map <Leader>sb :exe "hide bu" g:VIlisp_scratch<cr>
 
 " return to VIlisp_last_lisp -- "Test Return"
 map <Leader>tr :call VIlisp_goto_buffer_or_window( VIlisp_last_lisp )<cr>
