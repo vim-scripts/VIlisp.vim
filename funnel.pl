@@ -3,7 +3,7 @@
 # By Larry Clapp, vim@theclapp.org
 # Copyright 2002
 #
-# Last updated: Sun Jun 27 19:00:55 EDT 2004 
+# Last updated: Fri Aug 26 18:03:24 EDT 2005 
 #
 # spawn() adapted from the function of the same name in Expect.pm.  Docs for
 # IO::Pty leave a lot to be desired, esp. if you haven't fiddled with ttys
@@ -176,8 +176,8 @@ sub check_tty_data
 			print "sysread of tty returned undef\n";
 			print "error code is $!\n";
 		    }
-		    last;
 		}
+		last;
 	    }
 	    $n = select( $rout = $tty_rin, undef, undef, 0.1 );
 	}
