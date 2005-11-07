@@ -1,5 +1,5 @@
 
-" Last updated: Mon Aug 15 00:32:58 EDT 2005 
+" Last updated: Sun Oct 02 08:30:51 EDT 2005 
 
 " By Larry Clapp <vim@theclapp.org>
 " Copyright 2002
@@ -245,65 +245,67 @@ normal!
 " Interact with Lisp interpreter
 
 " send top-level s-exp to lisp: eval s-exp
-map <Leader>es :call VIlisp_eval_defun_lisp()<cr>
+nmap <Leader>es :call VIlisp_eval_defun_lisp()<cr>
 
 " send current s-exp to lisp: eval current
-map <Leader>ec :call VIlisp_eval_next_sexp_lisp()<cr>
+nmap <Leader>ec :call VIlisp_eval_next_sexp_lisp()<cr>
 
 " eval block
-map <Leader>eb :call VIlisp_eval_block()<cr>
+vmap <Leader>eb :call VIlisp_eval_block()<cr>
+vmap <Leader>es <Leader>eb
+vmap <Leader>ec <Leader>eb
 
 " reset/quit interpreter
-map <Leader>ri :call VIlisp_send_to_lisp( "q\n" )<cr>
-map <Leader>qi :call VIlisp_send_to_lisp( "(quit)\n" )<cr>
+nmap <Leader>ri :call VIlisp_send_to_lisp( "q\n" )<cr>
+nmap <Leader>qi :call VIlisp_send_to_lisp( "(quit)\n" )<cr>
 
 " send ^C to interpreter
 " (Note if you try to enter this mapping from the ex command line, you have to
 " press ^V FOUR times, not twice as it appears here.)
-map <Leader>ci :call VIlisp_send_to_lisp( "" )<cr>
+nmap <Leader>ci :call VIlisp_send_to_lisp( "" )<cr>
 
 " ###################################################################
 " Manipulate expression within Vim buffers
 
 " copy current s-exp to test buffer: Copy to Test
-map <Leader>ct :call VIlisp_copy_sexp_to_test()<cr>
+nmap <Leader>ct :call VIlisp_copy_sexp_to_test()<cr>
 
 
 " ###################################################################
 " load/compile files
 
 " load file: Load File; Load Any File, Load Compiled File
-map <Leader>lf :call VIlisp_send_to_lisp( "(load \"" . expand( "%:p" ) . "\")\n")<cr>
-map <Leader>laf :call VIlisp_send_to_lisp( "(load \"" . expand( "%:p:r" ) . "\")\n")<cr>
-map <Leader>lcf <Leader>laf
+nmap <Leader>lf :call VIlisp_send_to_lisp( "(load \"" . expand( "%:p" ) . "\")\n")<cr>
+nmap <Leader>laf :call VIlisp_send_to_lisp( "(load \"" . expand( "%:p:r" ) . "\")\n")<cr>
+nmap <Leader>lcf <Leader>laf
 
 " compile file: Compile File; Compile & Load File
-map <Leader>cf :call VIlisp_send_to_lisp( "(compile-file \"" . expand( "%:p" ) . "\")\n")<cr>
-map <Leader>clf <Leader>cf<Leader>laf
+nmap <Leader>cf :call VIlisp_send_to_lisp( "(compile-file \"" . expand( "%:p" ) . "\")\n")<cr>
+nmap <Leader>clf <Leader>cf<Leader>laf
 
 " ###################################################################
 " Move around among buffers
 
 " goto test or scratch buffer
-map <Leader>tb :call VIlisp_goto_buffer_or_window( g:VIlisp_test )<cr>
-map <Leader>wtb :sb <bar> call VIlisp_goto_buffer_or_window( g:VIlisp_test )<cr>
-map <Leader>sb :exe "hide bu" g:VIlisp_scratch<cr>
+nmap <Leader>tb :call VIlisp_goto_buffer_or_window( g:VIlisp_test )<cr>
+nmap <Leader>wtb :sb <bar> call VIlisp_goto_buffer_or_window( g:VIlisp_test )<cr>
+nmap <Leader>sb :exe "hide bu" g:VIlisp_scratch<cr>
 
 " return to VIlisp_last_lisp -- "Test Return"
-map <Leader>tr :call VIlisp_goto_buffer_or_window( VIlisp_last_lisp )<cr>
+nmap <Leader>tr :call VIlisp_goto_buffer_or_window( VIlisp_last_lisp )<cr>
 
 " return to "lisp buffer", or "last buffer", even
-map <Leader>lb <Leader>tr
+nmap <Leader>lb <Leader>tr
 
 " ###################################################################
 " Mark & format code
 
 " mark the current top-level s-expr: Mark S-exp
-map <Leader>ms 99[(V%
+nmap <Leader>ms 99[(V%
 
 " format current, format s-exp
-map <Leader>fc [(=%`'
-map <Leader>fs 99<Leader>fc
+nmap <Leader>fc [(=%`'
+nmap <Leader>fs 99<Leader>fc
 
 " ###################################################################
 " Add & delete code
@@ -315,28 +317,28 @@ if maparg( ",ilu" ) != ""
 endif
 
 " Put a list around the current form: Insert List
-map <Leader>il [(%a)<esc>h%i(
+nmap <Leader>il [(%a)<esc>h%i(
 
 " comment current -- doesn't work correctly on some forms
-map <Leader>cc m`[(i<cr><esc>v%<esc>a<cr><esc>:'<,'>s/^/; /<cr>``%/(<cr>
+nmap <Leader>cc m`[(i<cr><esc>v%<esc>a<cr><esc>:'<,'>s/^/; /<cr>``%/(<cr>
 
 
 " ###################################################################
 " Search the hyperspec
-map <Leader>he :call VIlisp_hyperspec( "exact", 0 )<cr>
-map <Leader>hp :call VIlisp_hyperspec( "prefix", 1 )<cr>
-map <Leader>hs :call VIlisp_hyperspec( "suffix", 1 )<cr>
-map <Leader>hg :call VIlisp_hyperspec( "grep", 1 )<cr>
-map <Leader>hi :call VIlisp_hyperspec( "index", 0 )<cr>
-map <Leader>hI :call VIlisp_hyperspec( "index-page", 0 )<cr>
+nmap <Leader>he :call VIlisp_hyperspec( "exact", 0 )<cr>
+nmap <Leader>hp :call VIlisp_hyperspec( "prefix", 1 )<cr>
+nmap <Leader>hs :call VIlisp_hyperspec( "suffix", 1 )<cr>
+nmap <Leader>hg :call VIlisp_hyperspec( "grep", 1 )<cr>
+nmap <Leader>hi :call VIlisp_hyperspec( "index", 0 )<cr>
+nmap <Leader>hI :call VIlisp_hyperspec( "index-page", 0 )<cr>
 
 " map the "man" command to do an exact lookup in the Hyperspec
-map K <Leader>he
+nmap K <Leader>he
 
 " ###################################################################
 " Do stuff with VIlisp
 
 " reload this file -- can't do this in a function
-exec "map <Leader>rvil :exe \"unlet! g:VIlisp_loaded <bar>"
+exec "nmap <Leader>rvil :exe \"unlet! g:VIlisp_loaded <bar>"
     \ "so " . s:VIlisp_location . "/VIlisp.vim\"<cr>"
 

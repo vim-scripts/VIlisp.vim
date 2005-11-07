@@ -3,7 +3,7 @@
 # By Larry Clapp, vim@theclapp.org
 # Copyright 2002
 #
-# Last updated: Fri Aug 26 18:03:24 EDT 2005 
+# Last updated: Sun Oct 02 08:11:54 EDT 2005 
 #
 # spawn() adapted from the function of the same name in Expect.pm.  Docs for
 # IO::Pty leave a lot to be desired, esp. if you haven't fiddled with ttys
@@ -95,6 +95,21 @@ sub process_readline_data2
 }
 
 
+sub last_partial
+{
+    my( $fragment ) = @_;
+    $last_partial_line = $fragment eq '' ? undef : $fragment;
+    if ($debug >= 3) {
+	if ($last_partial_line) {
+	    print "\nlast partial line is >$last_partial_line<\n";
+	} else {
+	    print "\nresetting last_partial_line\n";
+	}
+    }
+    $told_readline = 0;
+}
+
+
 sub check_tty_data
 {
     my( $tty_read, $rout, $n, $l );
@@ -111,17 +126,17 @@ sub check_tty_data
 	    $tty_read = sysread( $master, $l, $tty_block_size );
 	    if ($tty_read)
 	    {
-		print "$tty_read bytes read from tty\n"
+		print "check_tty_data: $tty_read bytes read from tty\n"
 		    if $debug >= 1;
 
 		if ($stdin_data eq '')
 		{
-		    print "no stdin data\n"
+		    print "check_tty_data: no stdin data\n"
 			if $debug >= 1;
 		}
 		else
 		{
-		    print "stdin_data is >$stdin_data<\n",
+		    print "check_tty_data: stdin_data is >$stdin_data<\n",
 		    "tty_data is >$l<\n"
 			if $debug >= 1;
 
@@ -129,7 +144,7 @@ sub check_tty_data
 		    if ($l =~ /(\Q$stdin_data\E[\r\n]*)/)
 		    {
 			$match = $1;
-			print "Deleting >$match< from tty_data\n"
+			print "check_tty_data: Deleting >$match< from tty_data\n"
 			    if $debug >= 1;
 			$l =~ s/\Q$match\E//;
 
@@ -148,18 +163,7 @@ sub check_tty_data
 		if ($tty_data !~ /[\r\n]$/)
 		{
 		    $tty_data =~ /\n?([^\r\n]*)$/;
-		    $last_partial_line = $1;
-		    if ($last_partial_line eq '')
-		    {
-			print "resetting last_partial_line\n"
-			    if $debug >= 3;
-			$last_partial_line = undef;
-		    }
-		    else
-		    {
-			print "last partial line is >$last_partial_line<\n"
-			    if $debug >= 3;
-		    }
+		    &last_partial( $1 );
 		}
 	    }
 	    else
@@ -180,6 +184,10 @@ sub check_tty_data
 		last;
 	    }
 	    $n = select( $rout = $tty_rin, undef, undef, 0.1 );
+	    if ($n) {
+		print "check_tty_data: more input; looping\n"
+		    if $debug >= 3;
+	    }
 	}
     }
     else
@@ -207,6 +215,7 @@ sub check_pipe_data
     $l = '';
 
     # poll the outgoing tty; return if not empty
+    my $wout;
     $n = select( undef, $wout = $tty_rin, $eout = $pipe_rin, 0 );
     if ($n == 0) {
 	# sleep for a tenth of a second to try to let the other end catch up
@@ -241,7 +250,6 @@ sub check_pipe_data
 		    $reload_interpreter = 1;
 		}
 		print $master $l;
-		$pipe_data = $l;
 	    }
 	    else
 	    {
@@ -273,7 +281,7 @@ sub install_handler
 {
     if (defined( $last_partial_line ))
     {
-	print "Installing handler with prompt >$last_partial_line<\n",
+	print "*** Installing handler with prompt >$last_partial_line<\n",
 	    "resetting last_partial_line\n"
 	    if $debug >= 3;
 	$rl->{already_prompted} = 1;
@@ -284,7 +292,7 @@ sub install_handler
     }
     else
     {
-	print "Installing handler with no prompt\n"
+	print "*** Installing handler with no prompt\n"
 	    if $debug >= 3;
 	$rl->{already_prompted} = 0;
 	$rl->callback_handler_install( '', \&process_readline_data2 );
@@ -295,7 +303,7 @@ sub install_handler
 
 sub uninstall_handler
 {
-    print "Uninstalling handler\n"
+    print "*** Uninstalling handler\n"
 	if $debug >= 3;
     $rl->callback_handler_install( '', undef );
     $handler_installed = 0;
@@ -313,7 +321,8 @@ sub check_stdin_data
 	if ($last_partial_line
 	    && !$told_readline)
 	{
-	    print "Telling readline on new line; resetting last_partial_line\n"
+	    print "*** Telling readline on new line; resetting prompt to ",
+		"'$last_partial_line'\n"
 		if $debug >= 3;
 	    $told_readline = 1;
 	    $rl->set_prompt( $last_partial_line );
@@ -377,8 +386,6 @@ sub check_stdin_data
 select( STDERR ); $| = 1;
 select( STDOUT ); $| = 1;
 
-# timeout in seconds
-$timeout = 0.05;
 $got_a_line2 = 0;
 $lineread2 = '';
 
@@ -388,18 +395,14 @@ $debug = 0;
 $pipe_block_size = 1024;
 $tty_block_size = 1024;
 
-&getopt( 'Db' );
+&getopt( 'D' );
 $debug = $opt_D 	if $opt_D;
-$block_size = $opt_b	if $opt_b;
 
 $pipe_name = shift @ARGV;
-
-$exec_count = 0;
 
 $rl = new Term::ReadLine 'funnel';
 $rl->initialize();
 $rl->prep_terminal( 0 );
-$attribs = $rl->Attribs;
 $rl->using_history();
 
 if ($debug >= 2)
@@ -409,8 +412,11 @@ if ($debug >= 2)
 }
 
 &install_handler();
+$SIG{ WINCH } = sub {};
 
 do {
+    my $num_children = 0;
+
     $reload_interpreter = 0;
 
     if (! -e $pipe_name)
@@ -440,7 +446,9 @@ do {
     {
 	# child
 
+	$SIG{ HUP } = sub { exit; };
 	$SIG{ INT } = 'IGNORE';
+	$SIG{ WINCH } = 'IGNORE';
 
 	# Open it for output, so the open-for-input call doesn't block.  This allows
 	# any other process to just open it, write to it, and close it, and we don't
@@ -454,6 +462,8 @@ do {
 	# sleep for a year
 	sleep( 3600 * 24 * 365 );
 	exit;
+    } else {
+	$num_children++;
     }
 
     print "spawned 'writer' process; pid is $writer_pid\n"
@@ -472,6 +482,8 @@ do {
     $master = &spawn( @ARGV );
     print "spawned @ARGV\n"
 	if $debug >= 1;
+    $num_children++
+	if $master;
 
     $SIG{ INT } = \&catch_sig;
 
@@ -502,7 +514,8 @@ do {
 	    # wait for *any* data
 	    print "waiting for any data\n"
 		if $debug;
-	    $n = select( $rout = $rin_all, undef, undef, undef );
+	    my $rout;
+	    select( $rout = $rin_all, undef, undef, undef );
 	}
     }
     
@@ -514,25 +527,26 @@ do {
     }
     else
     {
-	print STDERR "ERROR: 'writer' pid $pid no longer exists!\n";
+	print STDERR "ERROR: 'writer' pid $writer_pid no longer exists!\n";
+	$num_children--;
     }
 
-    # Wait for both children: the Lisp listener and the "writer" process
-    # print "Waiting for children to end\n";
-    $rc = wait();
-    print "wait returned $rc; \$? = $?\n"
+    # Wait for both children (if they're still around): the Lisp listener and
+    # the "writer" process
+    print "Waiting for $num_children children to end\n"
 	if $debug;
-
-    $rc = wait();
-    print "wait returned $rc; \$? = $?\n"
-	if $debug;
+    while ($num_children > 0) {
+	$rc = wait();
+	print "wait returned $rc; \$? = $?\n"
+	    if $debug;
+	$num_children--;
+    }
 
     # FIXME: probably need to do something to close down the tty, but I don't know
     # exactly what
 
     # delete the fifo
-    unlink( $pipe_name )
-	if $debug == 0;
+    unlink( $pipe_name );
 } while ($reload_interpreter);
 
 &uninstall_handler();
